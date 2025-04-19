@@ -100,5 +100,8 @@ caves = [
     {"id": 99, "name": "Banshee - Yakka"},
     {"id": 100, "name": "Frost Demon - Yakka"},
     {"id": 101, "name": "Vampire - Yakka"},
-    {"id": 102, "name": "Tomb Guard - Yakka"}
+    {"id": 102, "name": "Dark Dragon - Esquerda - Yakka"},
+    {"id": 103, "name": "Dark Dragon - Direita - Yakka"},
+    {"id": 104, "name": "Tornado Grinders - Yakka"},
+    {"id": 105, "name": "Vampire Apocolypses - Yakka"},
 ]
