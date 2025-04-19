@@ -142,7 +142,11 @@ async def next(ctx, tipo: str, numero: int, duracion: str = "1h"):
     clave = f"{tipo.upper()} {numero}"
     usuario = ctx.author
 
-    if clave in cuevas_ocupadas and cuevas_ocupadas[clave]["usuario"].id == usuario.id:
+    if clave not in cuevas_ocupadas:
+        await ctx.send("⚠️ Esa cueva no está activa. Usa `!claim` para postearla primero.")
+        return
+
+    if cuevas_ocupadas[clave]["usuario"].id == usuario.id:
         await ctx.send("⚠️ No puedes hacer cola para una cueva que ya estás posteando.")
         return
 
@@ -151,7 +155,7 @@ async def next(ctx, tipo: str, numero: int, duracion: str = "1h"):
 
     for persona, _ in colas_espera[clave]:
         if persona == usuario:
-            await ctx.send("🔛 Ya estás en la cola para esa cueva.")
+            await ctx.send(f"🔁 Ya estás en la cola para la cueva {clave}.")
             return
 
     tiempo_segundos = convertir_duracion(duracion)
@@ -160,7 +164,7 @@ async def next(ctx, tipo: str, numero: int, duracion: str = "1h"):
         return
 
     colas_espera[clave].append((usuario, duracion))
-    await ctx.send(f"📅 {usuario.mention} añadido a la cola para la cueva {clave} ({duracion}).")
+    await ctx.send(f"🗓️ {usuario.mention} añadido a la cola para la cueva {clave} ({duracion}).")
 
 @bot.command()
 async def salircola(ctx):
@@ -225,4 +229,4 @@ def convertir_duracion(duracion: str):
     except:
         return None
 
-bot.run(os.getenv("DISCORD_TOKEN"))
+bot.run(os.getenv("TOKEN"))
