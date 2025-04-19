@@ -1,5 +1,5 @@
-from keep_alive import keep_alive  # Primero importas
-keep_alive()                       # Luego ejecutas el keep_alive
+from keep_alive import keep_alive
+keep_alive()
 
 import discord
 from discord.ext import commands, tasks
@@ -44,7 +44,6 @@ async def procesar_claim(usuario, tipo: str, numero: int, duracion: str, ctx=Non
     ahora = datetime.utcnow()
     autor_id = usuario.id
 
-    # Obtén el nombre de la cueva correspondiente al código
     nombre_cueva = obtener_nombre_cueva(numero)
     if not nombre_cueva:
         if ctx:
@@ -164,18 +163,20 @@ async def next(ctx, tipo: str, numero: int, duracion: str = "1h"):
     await ctx.send(f"📅 {usuario.mention} añadido a la cola para la cueva {clave} ({duracion}).")
 
 @bot.command()
-async def salircola(ctx, tipo: str, numero: int):
-    clave = f"{tipo.upper()} {numero}"
+async def salircola(ctx):
     usuario = ctx.author
+    encontrado = False
 
-    # Verifica si el usuario está en la cola
-    if clave not in colas_espera or not any(persona == usuario for persona, _ in colas_espera[clave]):
-        await ctx.send(f"❌ No estás en la cola para la cueva {clave}.")
-        return
+    for clave in colas_espera:
+        nueva_cola = [(persona, tiempo) for persona, tiempo in colas_espera[clave] if persona != usuario]
+        if len(nueva_cola) != len(colas_espera[clave]):
+            colas_espera[clave] = nueva_cola
+            await ctx.send(f"✔️ {usuario.mention} ha salido de la cola para la cueva {clave}.")
+            encontrado = True
+            break
 
-    # Elimina al usuario de la cola
-    colas_espera[clave] = [persona for persona in colas_espera[clave] if persona[0] != usuario]
-    await ctx.send(f"✔️ {usuario.mention} ha salido de la cola para la cueva {clave}.")
+    if not encontrado:
+        await ctx.send("❌ No estás en ninguna cola.")
 
 async def finalizar_cueva(clave, cancelador=None):
     data = cuevas_ocupadas.get(clave)
@@ -188,14 +189,12 @@ async def finalizar_cueva(clave, cancelador=None):
         pass
 
     usuario_anterior = data["usuario"]
-    
-    # Aplicar cooldown solo si es el mismo usuario que posteo
+
     if cancelador and cancelador.id == usuario_anterior.id:
         cooldowns.setdefault(clave, {})[usuario_anterior.id] = datetime.utcnow() + timedelta(minutes=15)
 
     del cuevas_ocupadas[clave]
 
-    # Parar la tarea del embed
     if clave in tareas_embed:
         tareas_embed[clave].cancel()
         del tareas_embed[clave]
@@ -223,10 +222,7 @@ def convertir_duracion(duracion: str):
         elif "m" in duracion:
             mins = int(duracion.replace("m", ""))
             return mins * 60
-        else:
-            return None
     except:
         return None
 
-keep_alive()
 bot.run(os.getenv("DISCORD_TOKEN"))
