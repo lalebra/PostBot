@@ -1,3 +1,6 @@
+from keep_alive import keep_alive  # Primero importas
+keep_alive()                       # Luego ejecutas el keep_alive
+
 import discord
 from discord.ext import commands, tasks
 import os
@@ -10,7 +13,6 @@ load_dotenv()
 CLIMA_CHANNEL_ID = int(os.getenv("CLIMA_CHANNEL_ID"))
 RESPAWN_CHANNEL_ID = int(os.getenv("RESPAWN_CHANNEL_ID"))
 OCUPADOS_CHANNEL_ID = int(os.getenv("OCUPADOS_CHANNEL_ID"))
-COLA_CHANNEL_ID = int(os.getenv("COLA_CHANNEL_ID"))
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -32,7 +34,6 @@ def obtener_nombre_cueva(codigo):
 @bot.event
 async def on_ready():
     print(f"🔥 Bot activo como un motor 2 tiempos: {bot.user}")
-    actualizar_cola_loop.start()
 
 @bot.command()
 async def claim(ctx, tipo: str, numero: int, duracion: str):
@@ -43,6 +44,7 @@ async def procesar_claim(usuario, tipo: str, numero: int, duracion: str, ctx=Non
     ahora = datetime.utcnow()
     autor_id = usuario.id
 
+    # Obtén el nombre de la cueva correspondiente al código
     nombre_cueva = obtener_nombre_cueva(numero)
     if not nombre_cueva:
         if ctx:
@@ -95,7 +97,6 @@ async def procesar_claim(usuario, tipo: str, numero: int, duracion: str, ctx=Non
     }
 
     iniciar_tarea_embed(clave)
-    await actualizar_embed_cola()
 
 def iniciar_tarea_embed(clave):
     @tasks.loop(seconds=30)
@@ -137,6 +138,45 @@ async def cancel(ctx):
 
     await finalizar_cueva(clave, cancelador=ctx.author)
 
+@bot.command()
+async def next(ctx, tipo: str, numero: int, duracion: str = "1h"):
+    clave = f"{tipo.upper()} {numero}"
+    usuario = ctx.author
+
+    if clave in cuevas_ocupadas and cuevas_ocupadas[clave]["usuario"].id == usuario.id:
+        await ctx.send("⚠️ No puedes hacer cola para una cueva que ya estás posteando.")
+        return
+
+    if clave not in colas_espera:
+        colas_espera[clave] = []
+
+    for persona, _ in colas_espera[clave]:
+        if persona == usuario:
+            await ctx.send("🔛 Ya estás en la cola para esa cueva.")
+            return
+
+    tiempo_segundos = convertir_duracion(duracion)
+    if not tiempo_segundos or tiempo_segundos < 3600 or tiempo_segundos > 7200:
+        await ctx.send("⛔ La duración debe ser entre 1h y 2h (ej: `!next B 1 2h`).")
+        return
+
+    colas_espera[clave].append((usuario, duracion))
+    await ctx.send(f"📅 {usuario.mention} añadido a la cola para la cueva {clave} ({duracion}).")
+
+@bot.command()
+async def salircola(ctx, tipo: str, numero: int):
+    clave = f"{tipo.upper()} {numero}"
+    usuario = ctx.author
+
+    # Verifica si el usuario está en la cola
+    if clave not in colas_espera or not any(persona == usuario for persona, _ in colas_espera[clave]):
+        await ctx.send(f"❌ No estás en la cola para la cueva {clave}.")
+        return
+
+    # Elimina al usuario de la cola
+    colas_espera[clave] = [persona for persona in colas_espera[clave] if persona[0] != usuario]
+    await ctx.send(f"✔️ {usuario.mention} ha salido de la cola para la cueva {clave}.")
+
 async def finalizar_cueva(clave, cancelador=None):
     data = cuevas_ocupadas.get(clave)
     if not data:
@@ -149,11 +189,13 @@ async def finalizar_cueva(clave, cancelador=None):
 
     usuario_anterior = data["usuario"]
     
+    # Aplicar cooldown solo si es el mismo usuario que posteo
     if cancelador and cancelador.id == usuario_anterior.id:
         cooldowns.setdefault(clave, {})[usuario_anterior.id] = datetime.utcnow() + timedelta(minutes=15)
 
     del cuevas_ocupadas[clave]
 
+    # Parar la tarea del embed
     if clave in tareas_embed:
         tareas_embed[clave].cancel()
         del tareas_embed[clave]
@@ -166,29 +208,6 @@ async def finalizar_cueva(clave, cancelador=None):
         tipo, numero = clave.split()
         ctx_fake = await bot.get_context(mensaje)
         await procesar_claim(siguiente, tipo, int(numero), duracion, ctx_fake)
-
-    await actualizar_embed_cola()
-
-async def actualizar_embed_cola():
-    cola_channel = bot.get_channel(COLA_CHANNEL_ID)
-    if not cola_channel:
-        return
-
-    embed_cola = discord.Embed(title="📜 Cola de Reclamaciones", color=0x00ffff)
-    for clave, cola in colas_espera.items():
-        nombre_cueva = obtener_nombre_cueva(clave.split()[1])
-        lista_usuarios = "\n".join([f"{usuario.display_name} - {duracion}" for usuario, duracion in cola])
-        embed_cola.add_field(name=f"Cueva {nombre_cueva}", value=lista_usuarios if lista_usuarios else "No hay usuarios en cola.", inline=False)
-
-    mensajes = await cola_channel.history(limit=1).flatten()
-    if mensajes:
-        await mensajes[0].edit(embed=embed_cola)
-    else:
-        await cola_channel.send(embed=embed_cola)
-
-@tasks.loop(seconds=30)
-async def actualizar_cola_loop():
-    await actualizar_embed_cola()
 
 def formatear_tiempo(tiempo_final):
     restante = tiempo_final - datetime.utcnow()
@@ -208,10 +227,6 @@ def convertir_duracion(duracion: str):
             return None
     except:
         return None
-
-def keep_alive():
-    # Esta función debe mantener el bot despierto en entornos como Replit
-    pass
 
 keep_alive()
 bot.run(os.getenv("DISCORD_TOKEN"))
