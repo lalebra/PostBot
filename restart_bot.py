@@ -1,26 +1,17 @@
 import os
+import datetime
 import time
-from datetime import datetime
-import subprocess
 
-# Función para calcular la hora actual en la República Dominicana (UTC-4)
-def hora_local():
-    return datetime.utcnow().replace(tzinfo=None) - timedelta(hours=4)
+def restart():
+    print("Reiniciando el bot...")
+    os.system("python main.py")
 
-# Configuración para reiniciar el bot a las 4:00 AM (hora de RD)
 while True:
-    # Obtener la hora actual
-    ahora = hora_local()
-    
-    # Comprobar si es las 4:00 AM
-    if ahora.hour == 4 and ahora.minute == 0:
-        print("Es hora de reiniciar el bot...")
+    now = datetime.datetime.utcnow()
+    hora_rd = (now - datetime.timedelta(hours=4)).time()
 
-        # Reiniciar el bot usando subprocess para llamar a render o el comando adecuado
-        subprocess.run(["render", "restart", "<nombre_del_servicio_en_render>"])
+    if hora_rd.hour == 4 and hora_rd.minute == 0:
+        restart()
+        time.sleep(60)  # Espera 1 minuto para no reiniciar más de una vez
 
-        # Esperar un minuto para evitar que reinicie varias veces
-        time.sleep(60)
-    else:
-        # Dormir por 60 segundos para revisar la hora de nuevo
-        time.sleep(60)
+    time.sleep(10)  # Chequea cada 10 segundos
