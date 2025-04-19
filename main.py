@@ -1,4 +1,6 @@
-from keep_alive import keep_alive
+from keep_alive import keep_alive  # Primero importas
+keep_alive()                       # Luego ejecutas el keep_alive
+
 import discord
 from discord.ext import commands, tasks
 import os
@@ -176,15 +178,15 @@ async def procesar_claim(usuario, tipo: str, numero: int, duracion: str, ctx=Non
         return
 
     tiempo_final = ahora + timedelta(seconds=tiempo_segundos)
-    display_name = usuario.nick or usuario.name
+    display_name = usuario.display_name
 
     embed_posteo = discord.Embed(title="✅ Cueva Reclamada", color=0x00ff00)
-    embed_posteo.add_field(name="Cueva", value=nombre_cueva, inline=True)  # Aquí usamos el nombre de la cueva
+    embed_posteo.add_field(name="Cueva", value=nombre_cueva, inline=True)
     embed_posteo.add_field(name="Tiempo Restante", value=formatear_tiempo(tiempo_final), inline=True)
     embed_posteo.set_footer(text=f"Reclamado por {display_name}", icon_url=usuario.display_avatar.url)
 
     embed_ocupado = discord.Embed(title="🔵 Cueva Ocupada", color=0xff0000)
-    embed_ocupado.add_field(name="Cueva", value=nombre_cueva, inline=True)  # Aquí usamos el nombre de la cueva
+    embed_ocupado.add_field(name="Cueva", value=nombre_cueva, inline=True)
     embed_ocupado.add_field(name="Tiempo Restante", value=formatear_tiempo(tiempo_final), inline=True)
     embed_ocupado.set_footer(text=f"Posteado por {display_name}", icon_url=usuario.display_avatar.url)
 
