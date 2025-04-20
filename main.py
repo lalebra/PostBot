@@ -25,23 +25,44 @@ colas_espera = {}
 cooldowns = {}
 tareas_embed = {}
 
-
-def obtener_nombre_cueva(codigo):
+def obtener_nombre_cueva(numero):
     for cueva in caves:
-        if cueva["id"] == codigo:
+        if cueva["id"] == numero:
             return cueva["name"]
     return None
 
+def convertir_duracion(duracion: str):
+    try:
+        if duracion.endswith("h"):
+            return int(duracion[:-1]) * 3600
+        if duracion.endswith("m"):
+            return int(duracion[:-1]) * 60
+    except:
+        return None
+
+def formatear_tiempo(futuro):
+    restante = futuro - datetime.utcnow()
+    minutos, segundos = divmod(int(restante.total_seconds()), 60)
+    horas, minutos = divmod(minutos, 60)
+    return f"{horas}h {minutos}m"
+
+def tiene_posteo_activo(usuario):
+    return any(data["usuario"].id == usuario.id for data in cuevas_ocupadas.values())
+
+def esta_en_una_cola(usuario):
+    for cola in colas_espera.values():
+        for persona, _ in cola:
+            if persona.id == usuario.id:
+                return True
+    return False
 
 @bot.event
 async def on_ready():
     print(f"🔥 Bot activo como un motor 2 tiempos: {bot.user}")
 
-
 @bot.command()
 async def claim(ctx, tipo: str, numero: int, duracion: str):
     await procesar_claim(ctx.author, tipo, numero, duracion, ctx)
-
 
 async def procesar_claim(usuario, tipo: str, numero: int, duracion: str, ctx=None):
     clave = f"{tipo.upper()} {numero}"
@@ -57,6 +78,11 @@ async def procesar_claim(usuario, tipo: str, numero: int, duracion: str, ctx=Non
     if clave in cuevas_ocupadas:
         if ctx:
             await ctx.send(f"❌ La cueva {clave} ya está ocupada.")
+        return
+
+    if tiene_posteo_activo(usuario):
+        if ctx:
+            await ctx.send("⚠️ Ya tienes un posteo activo.")
         return
 
     if clave in cooldowns and autor_id in cooldowns[clave]:
@@ -101,7 +127,6 @@ async def procesar_claim(usuario, tipo: str, numero: int, duracion: str, ctx=Non
 
     iniciar_tarea_embed(clave)
 
-
 def iniciar_tarea_embed(clave):
     @tasks.loop(seconds=30)
     async def actualizar():
@@ -127,7 +152,6 @@ def iniciar_tarea_embed(clave):
     tareas_embed[clave] = actualizar
     actualizar.start()
 
-
 @bot.command()
 async def cancel(ctx):
     autor = ctx.author
@@ -141,8 +165,7 @@ async def cancel(ctx):
         await ctx.send("❌ No tienes ninguna cueva posteada.")
         return
 
-    await finalizar_cueva(clave, cancelador=ctx.author)
-
+    await finalizar_cueva(clave, cancelador=autor)
 
 @bot.command()
 async def next(ctx, tipo: str, numero: int, duracion: str = "1h"):
@@ -157,39 +180,31 @@ async def next(ctx, tipo: str, numero: int, duracion: str = "1h"):
         await ctx.send("⚠️ No puedes hacer cola para una cueva que ya estás posteando.")
         return
 
-    if clave not in colas_espera:
-        colas_espera[clave] = []
-
-    for persona, _ in colas_espera[clave]:
-        if persona == usuario:
-            await ctx.send(f"🔁 Ya estás en la cola para la cueva {clave}.")
-            return
+    if esta_en_una_cola(usuario):
+        for c, cola in colas_espera.items():
+            for persona, _ in cola:
+                if persona.id == usuario.id:
+                    await ctx.send(f"🚫 Ya estás en la cola para la cueva {c}.")
+                    return
 
     tiempo_segundos = convertir_duracion(duracion)
     if not tiempo_segundos or tiempo_segundos < 3600 or tiempo_segundos > 7200:
         await ctx.send("⛔ La duración debe ser entre 1h y 2h (ej: `!next B 1 2h`).")
         return
 
-    colas_espera[clave].append((usuario, duracion))
+    colas_espera.setdefault(clave, []).append((usuario, duracion))
     await ctx.send(f"🗓️ {usuario.mention} añadido a la cola para la cueva {clave} ({duracion}).")
-
 
 @bot.command()
 async def salircola(ctx):
     usuario = ctx.author
-    encontrado = False
-
-    for clave in colas_espera:
-        nueva_cola = [(persona, tiempo) for persona, tiempo in colas_espera[clave] if persona != usuario]
-        if len(nueva_cola) != len(colas_espera[clave]):
+    for clave in list(colas_espera.keys()):
+        nueva_cola = [(p, t) for p, t in colas_espera[clave] if p.id != usuario.id]
+        if len(nueva_cola) < len(colas_espera[clave]):
             colas_espera[clave] = nueva_cola
-            await ctx.send(f"✔️ {usuario.mention} ha salido de la cola para la cueva {clave}.")
-            encontrado = True
-            break
-
-    if not encontrado:
-        await ctx.send("❌ No estás en ninguna cola.")
-
+            await ctx.send(f"✅ {usuario.mention} ha salido de la cola para la cueva {clave}.")
+            return
+    await ctx.send("❌ No estás en ninguna cola.")
 
 async def finalizar_cueva(clave, cancelador=None):
     data = cuevas_ocupadas.get(clave)
@@ -202,12 +217,10 @@ async def finalizar_cueva(clave, cancelador=None):
         pass
 
     usuario_anterior = data["usuario"]
-
     if cancelador and cancelador.id == usuario_anterior.id:
         cooldowns.setdefault(clave, {})[usuario_anterior.id] = datetime.utcnow() + timedelta(minutes=15)
 
     del cuevas_ocupadas[clave]
-
     if clave in tareas_embed:
         tareas_embed[clave].cancel()
         del tareas_embed[clave]
@@ -224,30 +237,8 @@ async def finalizar_cueva(clave, cancelador=None):
     if clave in colas_espera and colas_espera[clave]:
         siguiente, duracion = colas_espera[clave].pop(0)
         canal_temporal = await siguiente.create_dm()
-        mensaje = await canal_temporal.send(f"📢 Te tocó postear en la cueva {clave} por {duracion}, posteando...")
-
+        await canal_temporal.send(f"📢 Te tocó postear en la cueva {clave} por {duracion}, posteando...")
         tipo, numero = clave.split()
-        ctx_fake = await bot.get_context(mensaje)
-        await procesar_claim(siguiente, tipo, int(numero), duracion, ctx_fake)
+        await procesar_claim(siguiente, tipo, int(numero), duracion)
 
-
-def formatear_tiempo(tiempo_final):
-    restante = tiempo_final - datetime.utcnow()
-    minutos, segundos = divmod(int(restante.total_seconds()), 60)
-    horas, minutos = divmod(minutos, 60)
-    return f"{horas:02d}:{minutos:02d}:{segundos:02d}"
-
-
-def convertir_duracion(duracion: str):
-    duracion = duracion.lower()
-    if "h" in duracion:
-        try:
-            horas = int(duracion.replace("h", "").strip())
-            return horas * 3600
-        except:
-            return None
-    return None
-
-
-keep_alive()
 bot.run(os.getenv("DISCORD_TOKEN"))
