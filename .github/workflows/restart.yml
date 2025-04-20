@@ -1,36 +1,30 @@
-name: Restart Bot
+name: Reiniciar Bot y Borrar Mensajes
 
 on:
-  workflow_dispatch:   # Permite que el reinicio sea manual
-    inputs:
-      reason:
-        description: 'Reason for restart'
-        required: true
-        type: string
+  workflow_dispatch:
 
 jobs:
   restart:
     runs-on: ubuntu-latest
+
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v2
+      - name: Check out the repository
+        uses: actions/checkout@v3
 
-    - name: Set up Python 3.x
-      uses: actions/setup-python@v2
-      with:
-        python-version: '3.8'
+      - name: Set up Python
+        uses: actions/setup-python@v3
+        with:
+          python-version: 3.9
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
-    - name: Borrar mensajes en los canales de respawn y ocupados
-      run: |
-        echo "Borrando mensajes en los canales de respawn y ocupados..."
-        python -c "import discord, os; from discord.ext import commands; from dotenv import load_dotenv; load_dotenv(); token = os.getenv('DISCORD_TOKEN'); client = discord.Client(); @client.event async def on_ready(): respawn_channel = client.get_channel(int(os.getenv('RESPAWN_CHANNEL_ID'))); ocupados_channel = client.get_channel(int(os.getenv('OCUPADOS_CHANNEL_ID'))); await respawn_channel.purge(limit=100); await ocupados_channel.purge(limit=100); print('Mensajes borrados en los canales.'); await client.close(); client.run(token)"
+      - name: Borrar mensajes en canales de Discord
+        run: |
+          python clear_messages.py
 
-    - name: Reiniciar el bot
-      run: |
-        echo "Reiniciando el bot..."
-        python main.py
+      - name: Reiniciar bot
+        run: |
+          python main.py
