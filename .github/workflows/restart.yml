@@ -1,29 +1,46 @@
-name: Reiniciar Bot
+name: Reiniciar el bot manualmente
 
 on:
-  schedule:
-    # Reiniciar cada día a las 4 AM (hora UTC)
-    - cron: "0 4 * * *"
+  workflow_dispatch:  # Esto permite que el flujo de trabajo se ejecute manualmente desde GitHub Actions
 
 jobs:
-  restart:
+  reiniciar_bot:
     runs-on: ubuntu-latest
-
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v2
+      - name: Checkout repository
+        uses: actions/checkout@v2
 
-    - name: Set up Python
-      uses: actions/setup-python@v2
-      with:
-        python-version: '3.9'
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.x'
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
-    - name: Reiniciar el bot
-      run: |
-        echo "Reiniciando el bot..."
-        python main.py
+      - name: Borrar mensajes en canales de respawn y ocupados
+        run: |
+          echo "Borrando mensajes en los canales de respawn y ocupados..."
+          python -c "import discord, os; from discord.ext import commands; \
+                    from dotenv import load_dotenv; \
+                    load_dotenv(); \
+                    token = os.getenv('DISCORD_TOKEN'); \
+                    client = discord.Client(); \
+                    @client.event \
+                    async def on_ready(): \
+                        respawn_channel = client.get_channel(int(os.getenv('RESPAWN_CHANNEL_ID'))); \
+                        ocupados_channel = client.get_channel(int(os.getenv('OCUPADOS_CHANNEL_ID'))); \
+                        await respawn_channel.purge(limit=100); \
+                        await ocupados_channel.purge(limit=100); \
+                        print('Mensajes borrados en los canales.'); \
+                        await client.close(); \
+                    client.run(token)"
+
+      - name: Reiniciar el bot
+        run: |
+          echo "Reiniciando el bot..."
+          pm2 restart bot  # Si usas pm2 para manejar el bot
+          # O si usas otro método de reinicio:
+          # python main.py
