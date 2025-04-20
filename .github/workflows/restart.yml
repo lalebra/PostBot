@@ -3,7 +3,7 @@ name: Restart Bot Daily
 on:
   schedule:
     - cron: '0 8 * * *'  # 4 AM RD es 8 AM UTC
-  workflow_dispatch:  # También permite reiniciar manualmente
+  workflow_dispatch:
 
 jobs:
   restart:
@@ -19,18 +19,25 @@ jobs:
         with:
           python-version: '3.x'  # Especifica tu versión de Python
 
-      # Paso 3: Instalar dependencias
-      - name: Instalar dependencias
+      # Paso 3: Instalar dependencias del sistema
+      - name: Instalar dependencias del sistema
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-pyaudio  # Este es el paquete que contiene `audioop`
+          sudo apt-get install -y libsndfile1  # Algunas veces necesario para el procesamiento de audio
+          
+      # Paso 4: Instalar dependencias de Python
+      - name: Instalar dependencias de Python
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      # Paso 4: Ejecutar script para borrar los mensajes de "ocupados"
+      # Paso 5: Ejecutar script para borrar los mensajes de "ocupados"
       - name: Borrar mensajes ocupados
         run: |
           python borrar_ocupados.py  # Este es el script que te mencioné antes
 
-      # Paso 5: Llamar hook de Render para reiniciar
+      # Paso 6: Llamar al hook de Render para reiniciar
       - name: Llamar hook de Render para reiniciar
         run: |
-          curl -X POST https://api.render.com/deploy/srv-d01a9hbuibrs73ai9q3g?key=VZP4HCWRJRg  # Aquí debes colocar tu URL del webhook de Render
+          curl -X POST https://api.render.com/deploy/srv-d01a9hbuibrs73ai9q3g?key=VZP4HCWRJRg
