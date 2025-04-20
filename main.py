@@ -249,4 +249,5 @@ def convertir_duracion(duracion: str):
     return None
 
 
-bot.run(os.getenv("TOKEN"))
+keep_alive()
+bot.run(os.getenv("DISCORD_TOKEN"))
