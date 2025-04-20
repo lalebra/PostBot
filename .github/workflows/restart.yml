@@ -13,7 +13,7 @@ jobs:
       - name: Checkout del código
         uses: actions/checkout@v2
 
-      # Paso 2: Configurar Python
+      # Paso 2: Configurar Python (si no lo tienes aún)
       - name: Configurar Python
         uses: actions/setup-python@v2
         with:
@@ -23,11 +23,10 @@ jobs:
       - name: Instalar dependencias del sistema
         run: |
           sudo apt-get update
-          sudo apt-get install -y python3-pyaudio  # Este es el paquete que contiene `audioop`
-          sudo apt-get install -y libsndfile1  # Algunas veces necesario para el procesamiento de audio
-          
+          sudo apt-get install -y libsndfile1
+
       # Paso 4: Instalar dependencias de Python
-      - name: Instalar dependencias de Python
+      - name: Instalar dependencias
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
