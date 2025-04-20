@@ -13,11 +13,11 @@ jobs:
       - name: Checkout del código
         uses: actions/checkout@v2
 
-      # Paso 2: Configurar Python (si no lo tienes aún)
+      # Paso 2: Configurar Python
       - name: Configurar Python
         uses: actions/setup-python@v2
         with:
-          python-version: '3.x'  # Especifica tu versión de Python
+          python-version: '3.8'  # Asegúrate de que sea una versión estable
 
       # Paso 3: Instalar dependencias del sistema
       - name: Instalar dependencias del sistema
