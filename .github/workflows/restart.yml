@@ -23,21 +23,18 @@ jobs:
       - name: Borrar mensajes en canales de respawn y ocupados
         run: |
           echo "Borrando mensajes en los canales de respawn y ocupados..."
-          python -c "import discord, os; from discord.ext import commands; \
-                    from dotenv import load_dotenv; \
-                    load_dotenv(); \
-                    token = os.getenv('DISCORD_TOKEN'); \
-                    client = discord.Client(); \
-                    @client.event \
-                    async def on_ready(): \
-                        respawn_channel = client.get_channel(int(os.getenv('RESPAWN_CHANNEL_ID'))); \
-                        ocupados_channel = client.get_channel(int(os.getenv('OCUPADOS_CHANNEL_ID'))); \
-                        await respawn_channel.purge(limit=100); \
-                        await ocupados_channel.purge(limit=100); \
-                        print('Mensajes borrados en los canales.'); \
-                        await client.close(); \
-                    client.run(token)"
-
+          python -c "import discord, os; from dotenv import load_dotenv; load_dotenv(); \
+                     token = os.getenv('DISCORD_TOKEN'); client = discord.Client(); \
+                     @client.event \
+                     async def on_ready(): \
+                         respawn_channel = client.get_channel(int(os.getenv('RESPAWN_CHANNEL_ID'))); \
+                         ocupados_channel = client.get_channel(int(os.getenv('OCUPADOS_CHANNEL_ID'))); \
+                         await respawn_channel.purge(limit=100); \
+                         await ocupados_channel.purge(limit=100); \
+                         print('Mensajes borrados en los canales.'); \
+                         await client.close(); \
+                     client.run(token)"
+          
       - name: Reiniciar el bot
         run: |
           echo "Reiniciando el bot..."
