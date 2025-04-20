@@ -1,42 +1,26 @@
-name: Restart Bot Daily
+name: Restart Bot Manually
 
 on:
-  schedule:
-    - cron: '0 8 * * *'  # 4 AM RD es 8 AM UTC
-  workflow_dispatch:
+  workflow_dispatch:  # Esto permite que el workflow se ejecute manualmente desde la interfaz de GitHub
 
 jobs:
   restart:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest  # Esto indica que usaremos Ubuntu como sistema para el job
+
     steps:
-      # Paso 1: Checkout del código
       - name: Checkout del código
-        uses: actions/checkout@v2
+        uses: actions/checkout@v2  # Descarga tu código del repositorio
 
-      # Paso 2: Configurar Python
       - name: Configurar Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v2  # Configura Python en el runner de GitHub
         with:
-          python-version: '3.8'  # Asegúrate de que sea una versión estable
+          python-version: '3.x'  # Versión de Python (ajusta si es necesario)
 
-      # Paso 3: Instalar dependencias del sistema
-      - name: Instalar dependencias del sistema
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libsndfile1
-
-      # Paso 4: Instalar dependencias de Python
       - name: Instalar dependencias
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          python -m pip install --upgrade pip  # Actualiza pip
+          pip install -r requirements.txt  # Instala las dependencias del bot
 
-      # Paso 5: Ejecutar script para borrar los mensajes de "ocupados"
-      - name: Borrar mensajes ocupados
+      - name: Reiniciar el bot
         run: |
-          python borrar_ocupados.py  # Este es el script que te mencioné antes
-
-      # Paso 6: Llamar al hook de Render para reiniciar
-      - name: Llamar hook de Render para reiniciar
-        run: |
-          curl -X POST https://api.render.com/deploy/srv-d01a9hbuibrs73ai9q3g?key=VZP4HCWRJRg
+          python main.py  # Reinicia el bot
