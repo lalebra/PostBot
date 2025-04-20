@@ -85,11 +85,6 @@ async def procesar_claim(usuario, tipo: str, numero: int, duracion: str, ctx=Non
             await ctx.send("⚠️ Ya tienes un posteo activo.")
         return
 
-    if esta_en_una_cola(usuario):
-        if ctx:
-            await ctx.send("🚫 No puedes postear mientras estás en una cola.")
-        return
-
     if clave in cooldowns and autor_id in cooldowns[clave]:
         if cooldowns[clave][autor_id] > ahora:
             restante = cooldowns[clave][autor_id] - ahora
@@ -128,7 +123,6 @@ async def procesar_claim(usuario, tipo: str, numero: int, duracion: str, ctx=Non
         "tiempo_final": tiempo_final,
         "mensaje_posteo": mensaje_posteo,
         "mensaje_ocupado": mensaje_ocupado,
-        "duracion": duracion,
     }
 
     iniciar_tarea_embed(clave)
@@ -173,36 +167,6 @@ async def cancel(ctx):
 
     await finalizar_cueva(clave, cancelador=autor)
 
-async def finalizar_cueva(clave, cancelador=None):
-    data = cuevas_ocupadas.get(clave)
-    if not data:
-        return
-
-    usuario = data["usuario"]
-    canal_ocupados = bot.get_channel(OCUPADOS_CHANNEL_ID)
-
-    # cooldown
-    cooldowns.setdefault(clave, {})[usuario.id] = datetime.utcnow() + timedelta(minutes=15)
-
-    try:
-        await data["mensaje_ocupado"].delete()
-    except:
-        pass
-
-    try:
-        await data["mensaje_posteo"].edit(embed=discord.Embed(title="❌ Cueva Liberada", description=f"{usuario.display_name} ha liberado la cueva.", color=0xaaaaaa))
-    except:
-        pass
-
-    tareas_embed.get(clave, lambda: None)().cancel()
-    tareas_embed.pop(clave, None)
-    cuevas_ocupadas.pop(clave, None)
-
-    # Ver si hay cola
-    if clave in colas_espera and colas_espera[clave]:
-        siguiente, duracion = colas_espera[clave].pop(0)
-        await procesar_claim(siguiente, *clave.split(), duracion)
-
 @bot.command()
 async def next(ctx, tipo: str, numero: int, duracion: str = "1h"):
     clave = f"{tipo.upper()} {numero}"
@@ -238,8 +202,43 @@ async def salircola(ctx):
         nueva_cola = [(p, t) for p, t in colas_espera[clave] if p.id != usuario.id]
         if len(nueva_cola) < len(colas_espera[clave]):
             colas_espera[clave] = nueva_cola
-            await ctx.send(f"👋 Saliste de la cola de la cueva {clave}.")
+            await ctx.send(f"✅ {usuario.mention} ha salido de la cola para la cueva {clave}.")
             return
     await ctx.send("❌ No estás en ninguna cola.")
+
+async def finalizar_cueva(clave, cancelador=None):
+    data = cuevas_ocupadas.get(clave)
+    if not data:
+        return
+
+    try:
+        await data["mensaje_ocupado"].delete()
+    except:
+        pass
+
+    usuario_anterior = data["usuario"]
+    if cancelador and cancelador.id == usuario_anterior.id:
+        cooldowns.setdefault(clave, {})[usuario_anterior.id] = datetime.utcnow() + timedelta(minutes=15)
+
+    del cuevas_ocupadas[clave]
+    if clave in tareas_embed:
+        tareas_embed[clave].cancel()
+        del tareas_embed[clave]
+
+    try:
+        canal_privado = await usuario_anterior.create_dm()
+        if cancelador:
+            await canal_privado.send(f"❌ Has cancelado tu posteo en la cueva {clave}.")
+        else:
+            await canal_privado.send(f"⏰ Se terminó tu tiempo en la cueva {clave}.")
+    except:
+        pass
+
+    if clave in colas_espera and colas_espera[clave]:
+        siguiente, duracion = colas_espera[clave].pop(0)
+        canal_temporal = await siguiente.create_dm()
+        await canal_temporal.send(f"📢 Te tocó postear en la cueva {clave} por {duracion}, posteando...")
+        tipo, numero = clave.split()
+        await procesar_claim(siguiente, tipo, int(numero), duracion)
 
 bot.run(os.getenv("DISCORD_TOKEN"))
