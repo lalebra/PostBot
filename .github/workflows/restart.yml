@@ -28,9 +28,9 @@ jobs:
       # Paso 4: Ejecutar script para borrar los mensajes de "ocupados"
       - name: Borrar mensajes ocupados
         run: |
-          python borrar_ocupados.py  # Este es el script que te mencioné antes
+          python borrar_ocupados.py  # Este es el script que limpia los embeds de "Cueva Ocupada"
 
-      # Paso 5: Llamar al hook de Render para reiniciar
+      # Paso 5: Llamar al hook de Render para reiniciar el bot
       - name: Llamar hook de Render para reiniciar
         run: |
           curl -X POST https://api.render.com/deploy/srv-d01a9hbuibrs73ai9q3g?key=VZP4HCWRJRg
