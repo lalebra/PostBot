@@ -1,30 +1,16 @@
-name: Reiniciar Bot y Borrar Mensajes
+name: Restart Bot
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:  # Permite ejecutar el flujo de trabajo manualmente desde GitHub UI
 
 jobs:
   restart:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check out the repository
-        uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v2
 
-      - name: Set up Python
-        uses: actions/setup-python@v3
-        with:
-          python-version: 3.9
-
-      - name: Install dependencies
+      - name: Restart Bot (via Render API)
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Borrar mensajes en canales de Discord
-        run: |
-          python clear_messages.py
-
-      - name: Reiniciar bot
-        run: |
-          python main.py
+          curl -X POST https://api.render.com/deploy/srv-d01a9hbuibrs73ai9q3g?key=VZP4HCWRJRg
