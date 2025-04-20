@@ -3,7 +3,7 @@ name: Restart Bot Daily
 on:
   schedule:
     - cron: '0 8 * * *'  # 4 AM RD es 8 AM UTC
-  workflow_dispatch:
+  workflow_dispatch:  # También permite reiniciar manualmente
 
 jobs:
   restart:
@@ -13,7 +13,7 @@ jobs:
       - name: Checkout del código
         uses: actions/checkout@v2
 
-      # Paso 2: Configurar Python (si no lo tienes aún)
+      # Paso 2: Configurar Python
       - name: Configurar Python
         uses: actions/setup-python@v2
         with:
@@ -28,9 +28,9 @@ jobs:
       # Paso 4: Ejecutar script para borrar los mensajes de "ocupados"
       - name: Borrar mensajes ocupados
         run: |
-          python borrar_ocupados.py  # Este es el script que limpia los embeds de "Cueva Ocupada"
+          python borrar_ocupados.py  # Este es el script que te mencioné antes
 
-      # Paso 5: Llamar al hook de Render para reiniciar el bot
+      # Paso 5: Llamar hook de Render para reiniciar
       - name: Llamar hook de Render para reiniciar
         run: |
-          curl -X POST https://api.render.com/deploy/srv-d01a9hbuibrs73ai9q3g?key=VZP4HCWRJRg
+          curl -X POST https://api.render.com/deploy/srv-d01a9hbuibrs73ai9q3g?key=VZP4HCWRJRg  # Aquí debes colocar tu URL del webhook de Render

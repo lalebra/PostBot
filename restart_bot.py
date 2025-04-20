@@ -8,7 +8,7 @@ def restart():
 
 while True:
     now = datetime.datetime.utcnow()
-    hora_rd = (now - datetime.timedelta(hours=4)).time()
+    hora_rd = (now - datetime.timedelta(hours=4)).time()  # Ajusta a hora RD
 
     if hora_rd.hour == 4 and hora_rd.minute == 0:
         restart()
