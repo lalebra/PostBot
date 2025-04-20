@@ -25,19 +25,23 @@ colas_espera = {}
 cooldowns = {}
 tareas_embed = {}
 
+
 def obtener_nombre_cueva(codigo):
     for cueva in caves:
         if cueva["id"] == codigo:
             return cueva["name"]
     return None
 
+
 @bot.event
 async def on_ready():
     print(f"🔥 Bot activo como un motor 2 tiempos: {bot.user}")
 
+
 @bot.command()
 async def claim(ctx, tipo: str, numero: int, duracion: str):
     await procesar_claim(ctx.author, tipo, numero, duracion, ctx)
+
 
 async def procesar_claim(usuario, tipo: str, numero: int, duracion: str, ctx=None):
     clave = f"{tipo.upper()} {numero}"
@@ -97,6 +101,7 @@ async def procesar_claim(usuario, tipo: str, numero: int, duracion: str, ctx=Non
 
     iniciar_tarea_embed(clave)
 
+
 def iniciar_tarea_embed(clave):
     @tasks.loop(seconds=30)
     async def actualizar():
@@ -122,6 +127,7 @@ def iniciar_tarea_embed(clave):
     tareas_embed[clave] = actualizar
     actualizar.start()
 
+
 @bot.command()
 async def cancel(ctx):
     autor = ctx.author
@@ -136,6 +142,7 @@ async def cancel(ctx):
         return
 
     await finalizar_cueva(clave, cancelador=ctx.author)
+
 
 @bot.command()
 async def next(ctx, tipo: str, numero: int, duracion: str = "1h"):
@@ -166,6 +173,7 @@ async def next(ctx, tipo: str, numero: int, duracion: str = "1h"):
     colas_espera[clave].append((usuario, duracion))
     await ctx.send(f"🗓️ {usuario.mention} añadido a la cola para la cueva {clave} ({duracion}).")
 
+
 @bot.command()
 async def salircola(ctx):
     usuario = ctx.author
@@ -181,6 +189,7 @@ async def salircola(ctx):
 
     if not encontrado:
         await ctx.send("❌ No estás en ninguna cola.")
+
 
 async def finalizar_cueva(clave, cancelador=None):
     data = cuevas_ocupadas.get(clave)
@@ -203,6 +212,15 @@ async def finalizar_cueva(clave, cancelador=None):
         tareas_embed[clave].cancel()
         del tareas_embed[clave]
 
+    try:
+        canal_privado = await usuario_anterior.create_dm()
+        if cancelador:
+            await canal_privado.send(f"❌ Has cancelado tu posteo en la cueva {clave}.")
+        else:
+            await canal_privado.send(f"⏰ Se terminó tu tiempo en la cueva {clave}.")
+    except:
+        pass
+
     if clave in colas_espera and colas_espera[clave]:
         siguiente, duracion = colas_espera[clave].pop(0)
         canal_temporal = await siguiente.create_dm()
@@ -212,22 +230,23 @@ async def finalizar_cueva(clave, cancelador=None):
         ctx_fake = await bot.get_context(mensaje)
         await procesar_claim(siguiente, tipo, int(numero), duracion, ctx_fake)
 
+
 def formatear_tiempo(tiempo_final):
     restante = tiempo_final - datetime.utcnow()
     minutos, segundos = divmod(int(restante.total_seconds()), 60)
     horas, minutos = divmod(minutos, 60)
-    return f"{horas}h {minutos}m"
+    return f"{horas:02d}:{minutos:02d}:{segundos:02d}"
+
 
 def convertir_duracion(duracion: str):
-    try:
-        if "h" in duracion:
-            horas = int(duracion.replace("h", ""))
+    duracion = duracion.lower()
+    if "h" in duracion:
+        try:
+            horas = int(duracion.replace("h", "").strip())
             return horas * 3600
-        elif "m" in duracion:
-            mins = int(duracion.replace("m", ""))
-            return mins * 60
-    except:
-        return None
+        except:
+            return None
+    return None
 
-bot.run(os.getenv("DISCORD_TOKEN"))
 
+bot.run(os.getenv("TOKEN"))
