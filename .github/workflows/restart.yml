@@ -1,26 +1,29 @@
-name: Restart Bot Manually
+name: Reiniciar Bot
 
 on:
-  workflow_dispatch:  # Esto permite que el workflow se ejecute manualmente desde la interfaz de GitHub
+  schedule:
+    # Reiniciar cada día a las 4 AM (hora UTC)
+    - cron: "0 4 * * *"
 
 jobs:
   restart:
-    runs-on: ubuntu-latest  # Esto indica que usaremos Ubuntu como sistema para el job
+    runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout del código
-        uses: actions/checkout@v2  # Descarga tu código del repositorio
+    - name: Checkout code
+      uses: actions/checkout@v2
 
-      - name: Configurar Python
-        uses: actions/setup-python@v2  # Configura Python en el runner de GitHub
-        with:
-          python-version: '3.x'  # Versión de Python (ajusta si es necesario)
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.9'
 
-      - name: Instalar dependencias
-        run: |
-          python -m pip install --upgrade pip  # Actualiza pip
-          pip install -r requirements.txt  # Instala las dependencias del bot
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
 
-      - name: Reiniciar el bot
-        run: |
-          python main.py  # Reinicia el bot
+    - name: Reiniciar el bot
+      run: |
+        echo "Reiniciando el bot..."
+        python main.py
