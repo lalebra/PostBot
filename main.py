@@ -62,6 +62,11 @@ async def on_ready():
 
 @bot.command()
 async def claim(ctx, tipo: str, numero: int, duracion: str):
+    # Verificar si el usuario está en cola
+    if esta_en_una_cola(ctx.author):
+        await ctx.send("⚠️ No puedes reclamar una cueva mientras estás en una cola.")
+        return
+    
     await procesar_claim(ctx.author, tipo, numero, duracion, ctx)
 
 async def procesar_claim(usuario, tipo: str, numero: int, duracion: str, ctx=None):
