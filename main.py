@@ -7,6 +7,9 @@ import os
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
 from caves import caves
+from reinicio_diario import iniciar_reinicio
+from pausado import manejar_mensaje_global
+
 
 load_dotenv()
 
@@ -34,11 +37,11 @@ def obtener_nombre_cueva(numero):
 def convertir_duracion(duracion: str):
     try:
         if duracion.endswith("h"):
-            return int(duracion[:-1]) * 3600
+            return int(duracion[:-1]) * 3600  # Convertir horas a segundos
         if duracion.endswith("m"):
-            return int(duracion[:-1]) * 60
-    except:
-        return None
+            return int(duracion[:-1]) * 60  # Convertir minutos a segundos
+    except ValueError:
+        return None  # Si no se puede convertir la duración, retorna None
 
 def formatear_tiempo(futuro):
     restante = futuro - datetime.utcnow()
@@ -47,7 +50,17 @@ def formatear_tiempo(futuro):
     return f"{horas}h {minutos}m"
 
 def tiene_posteo_activo(usuario):
-    return any(data["usuario"].id == usuario.id for data in cuevas_ocupadas.values())
+    # Verifica si el usuario tiene un posteo activo que no ha expirado
+    for data in cuevas_ocupadas.values():
+        if data["usuario"].id == usuario.id:
+            if data["tiempo_final"] > datetime.utcnow():  # Asegura que el posteo no haya expirado
+                return True
+            else:
+                # Si el posteo ya expiró, elimina la cueva de las ocupadas
+                clave = [clave for clave, cueva in cuevas_ocupadas.items() if cueva["usuario"].id == usuario.id][0]
+                del cuevas_ocupadas[clave]
+                return False
+    return False
 
 def esta_en_una_cola(usuario):
     for cola in colas_espera.values():
@@ -56,9 +69,13 @@ def esta_en_una_cola(usuario):
                 return True
     return False
 
+
 @bot.event
 async def on_ready():
     print(f"🔥 Bot activo como un motor 2 tiempos: {bot.user}")
+    iniciar_reinicio(bot)
+
+
 
 @bot.command()
 async def claim(ctx, tipo: str, numero: int, duracion: str):
@@ -82,7 +99,7 @@ async def procesar_claim(usuario, tipo: str, numero: int, duracion: str, ctx=Non
 
     if clave in cuevas_ocupadas:
         if ctx:
-            await ctx.send(f"❌ La cueva {clave} ya está ocupada.")
+            await ctx.send(f"❌ La cueva {nombre_cueva} ya está ocupada.")  # Mostrar el nombre de la cueva
         return
 
     if tiene_posteo_activo(usuario):
@@ -95,7 +112,7 @@ async def procesar_claim(usuario, tipo: str, numero: int, duracion: str, ctx=Non
             restante = cooldowns[clave][autor_id] - ahora
             minutos = int(restante.total_seconds() // 60)
             if ctx:
-                await ctx.send(f"⏳ Debes esperar {minutos} minutos para volver a postear la cueva {clave}.")
+                await ctx.send(f"⏳ Debes esperar {minutos} minutos para volver a postear la cueva {nombre_cueva}.")  # Mostrar el nombre de la cueva
             return
 
     tiempo_segundos = convertir_duracion(duracion)
@@ -132,8 +149,9 @@ async def procesar_claim(usuario, tipo: str, numero: int, duracion: str, ctx=Non
 
     iniciar_tarea_embed(clave)
 
+
 def iniciar_tarea_embed(clave):
-    @tasks.loop(seconds=30)
+    @tasks.loop(seconds=60)
     async def actualizar():
         data = cuevas_ocupadas.get(clave)
         if not data:
@@ -171,20 +189,28 @@ async def cancel(ctx):
         return
 
     await finalizar_cueva(clave, cancelador=autor)
-
+    
 @bot.command()
 async def next(ctx, tipo: str, numero: int, duracion: str = "1h"):
     clave = f"{tipo.upper()} {numero}"
     usuario = ctx.author
 
+    # Verificar si la cueva está activa
     if clave not in cuevas_ocupadas:
         await ctx.send("⚠️ Esa cueva no está activa. Usa `!claim` para postearla primero.")
         return
 
+    # Verificar si el usuario ya está posteando esta cueva
     if cuevas_ocupadas[clave]["usuario"].id == usuario.id:
         await ctx.send("⚠️ No puedes hacer cola para una cueva que ya estás posteando.")
         return
 
+    # Verificar si el usuario ya tiene un posteo activo en alguna otra cueva
+    if tiene_posteo_activo(usuario):
+        await ctx.send("⚠️ No puedes hacer cola mientras tienes un posteo activo en otra cueva.")
+        return
+
+    # Verificar si el usuario ya está en una cola
     if esta_en_una_cola(usuario):
         for c, cola in colas_espera.items():
             for persona, _ in cola:
@@ -192,13 +218,16 @@ async def next(ctx, tipo: str, numero: int, duracion: str = "1h"):
                     await ctx.send(f"🚫 Ya estás en la cola para la cueva {c}.")
                     return
 
+    # Verificar si la duración es válida
     tiempo_segundos = convertir_duracion(duracion)
     if not tiempo_segundos or tiempo_segundos < 3600 or tiempo_segundos > 7200:
         await ctx.send("⛔ La duración debe ser entre 1h y 2h (ej: `!next B 1 2h`).")
         return
 
+    # Añadir al usuario a la cola
     colas_espera.setdefault(clave, []).append((usuario, duracion))
     await ctx.send(f"🗓️ {usuario.mention} añadido a la cola para la cueva {clave} ({duracion}).")
+
 
 @bot.command()
 async def salircola(ctx):
@@ -222,6 +251,8 @@ async def finalizar_cueva(clave, cancelador=None):
         pass
 
     usuario_anterior = data["usuario"]
+    nombre_cueva = obtener_nombre_cueva(int(clave.split()[1]))  # Usar la función para obtener el nombre de la cueva
+
     if cancelador and cancelador.id == usuario_anterior.id:
         cooldowns.setdefault(clave, {})[usuario_anterior.id] = datetime.utcnow() + timedelta(minutes=15)
 
@@ -233,17 +264,86 @@ async def finalizar_cueva(clave, cancelador=None):
     try:
         canal_privado = await usuario_anterior.create_dm()
         if cancelador:
-            await canal_privado.send(f"❌ Has cancelado tu posteo en la cueva {clave}.")
+            await canal_privado.send(f"❌ Has cancelado tu posteo en la cueva {nombre_cueva}.")  # Mostrar el nombre de la cueva
         else:
-            await canal_privado.send(f"⏰ Se terminó tu tiempo en la cueva {clave}.")
+            await canal_privado.send(f"⏰ Se terminó tu tiempo en la cueva {nombre_cueva}.")  # Mostrar el nombre de la cueva
     except:
         pass
 
     if clave in colas_espera and colas_espera[clave]:
         siguiente, duracion = colas_espera[clave].pop(0)
         canal_temporal = await siguiente.create_dm()
-        await canal_temporal.send(f"📢 Te tocó postear en la cueva {clave} por {duracion}, posteando...")
+        await canal_temporal.send(f"📢 Te tocó postear en la cueva {nombre_cueva} por {duracion}, posteando...")  # Mostrar el nombre de la cueva
         tipo, numero = clave.split()
         await procesar_claim(siguiente, tipo, int(numero), duracion)
 
+
+
+@bot.command()
+@commands.is_owner()
+async def reiniciar(ctx):
+    await ctx.send("🔄 Reiniciando bot, espera un chin...")
+    os._exit(0)
+
+@bot.command()
+async def estado(ctx):
+    if not cuevas_ocupadas:
+        await ctx.send("📭 No hay cuevas activas ahora mismo.")
+        return
+
+    embed = discord.Embed(title="📊 Cuevas Activas", color=0x00ffcc)
+    for clave, data in cuevas_ocupadas.items():
+        tiempo = formatear_tiempo(data["tiempo_final"])
+        embed.add_field(
+            name=clave,
+            value=f"👤 {data['usuario'].display_name}\n⏳ {tiempo}",
+            inline=False
+        )
+    await ctx.send(embed=embed)
+
+@bot.event
+async def on_ready():
+    print(f"Bot conectado como {bot.user}")
+    print("Limpiando canales de cueva...")
+
+    respawn_channel = bot.get_channel(RESPAWN_CHANNEL_ID)
+    ocupados_channel = bot.get_channel(OCUPADOS_CHANNEL_ID)
+
+    async def limpiar_mensajes_con_titulo(channel, titulos):
+        if not channel:
+            print(f"Canal con ID {channel.id} no encontrado.")
+            return
+
+        try:
+            async for message in channel.history(limit=100):
+                for embed in message.embeds:
+                    if embed.title and any(titulo.lower() in embed.title.lower() for titulo in titulos):
+                        await message.delete()
+                        print(f"Embed eliminado en canal {channel.name}: {embed.title}")
+        except discord.Forbidden:
+            print(f"No tengo permisos para borrar mensajes en {channel.name}")
+        except Exception as e:
+            print(f"Error al borrar mensajes en {channel.name}: {e}")
+
+    # Borrar 'Cueva Reclamada' en canal de respawn
+    await limpiar_mensajes_con_titulo(respawn_channel, ["cueva reclamada"])
+
+    # Borrar 'Cueva Ocupada' en canal de ocupados
+    await limpiar_mensajes_con_titulo(ocupados_channel, ["cueva ocupada"])
+
+    print("Limpieza completada ✅")
+
+
+# Evento para manejar los mensajes
+@bot.event
+async def on_message(message):
+    borrado = await manejar_mensaje_global(message)
+
+    if borrado:
+        return  # Si fue borrado, no proceses el comando
+
+    await bot.process_commands(message)
+
+
+# 👇 SIEMPRE al final del todo
 bot.run(os.getenv("DISCORD_TOKEN"))
