@@ -151,9 +151,6 @@ async def procesar_claim(usuario, tipo: str, numero: int, duracion: str, ctx=Non
 
 
 def iniciar_tarea_embed(clave):
-    if clave in tareas_embed:
-        return  # Ya hay una tarea corriendo
-
     @tasks.loop(seconds=60)
     async def actualizar():
         data = cuevas_ocupadas.get(clave)
@@ -296,18 +293,13 @@ async def estado(ctx):
 
     embed = discord.Embed(title="📊 Cuevas Activas", color=0x00ffcc)
     for clave, data in cuevas_ocupadas.items():
-        numero = int(clave.split()[1])  # 🔥 Saca el número de la clave
-        nombre_cueva = obtener_nombre_cueva(numero)  # 🔥 Solo pasa el número
         tiempo = formatear_tiempo(data["tiempo_final"])
         embed.add_field(
-            name=nombre_cueva,
+            name=clave,
             value=f"👤 {data['usuario'].display_name}\n⏳ {tiempo}",
             inline=False
         )
     await ctx.send(embed=embed)
-
-
-
 
 @bot.event
 async def on_ready():
@@ -379,25 +371,6 @@ async def quitarpost(ctx, usuario: discord.User):
     # Enviar mensaje en el canal de comandos indicando que el usuario fue sacado
     await ctx.send(f"✅ {usuario.mention} ha sido sacado de la cueva {obtener_nombre_cueva(int(clave.split()[1]))}.")
 
-@bot.command()
-async def cola(ctx):
-    if not colas_espera:
-        await ctx.send("📭 No hay nadie en cola.")
-        return
-
-    embed = discord.Embed(title="📋 Colas de Cuevas", color=0x3498db)
-    
-    for clave, cola in colas_espera.items():
-        if cola:
-            numero = int(clave.split()[1])  # 🔥 Saca el número igual que en estado
-            nombre_cueva = obtener_nombre_cueva(numero) or clave  # 🔥 Usa nombre bonito o el código si falla
-            
-            # 🔥 Ahora numeramos cada persona
-            personas = '\n'.join(f"{idx+1}- {persona.display_name}" for idx, (persona, _) in enumerate(cola))
-            
-            embed.add_field(name=f"🕳️ {nombre_cueva}", value=f"{personas}", inline=False)
-
-    await ctx.send(embed=embed)
 
 
 # 👇 SIEMPRE al final del todo
