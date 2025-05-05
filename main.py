@@ -12,8 +12,6 @@ from caves import caves
 from pausado import manejar_mensaje_global
 import asyncio
 
-
-
 load_dotenv()
 
 CLIMA_CHANNEL_ID = int(os.getenv("CLIMA_CHANNEL_ID"))
@@ -74,7 +72,6 @@ def esta_en_una_cola(usuario):
             if persona.id == usuario.id:
                 return True
     return False
-
 
 @bot.command()
 @commands.cooldown(rate=1, per=3.0, type=commands.BucketType.user)
@@ -154,8 +151,6 @@ async def procesar_claim(usuario, tipo: str, numero: int, duracion: str, ctx=Non
 
     iniciar_tarea_embed(clave)
 
-
-
 def iniciar_tarea_embed(clave):
     if clave in tareas_embed:
         return  # Ya hay una tarea corriendo
@@ -203,7 +198,6 @@ def iniciar_tarea_embed(clave):
         actualizar.start()
 
     bot.loop.create_task(start_con_delay())
-
 
 @bot.command()
 async def cancel(ctx):
@@ -257,7 +251,6 @@ async def next(ctx, tipo: str, numero: int, duracion: str = "1h"):
     # Añadir al usuario a la cola
     colas_espera.setdefault(clave, []).append((usuario, duracion))
     await ctx.send(f"🗓️ {usuario.mention} añadido a la cola para la cueva {clave} ({duracion}).")
-
 
 @bot.command()
 async def salircola(ctx):
@@ -325,7 +318,6 @@ async def finalizar_cueva(clave, cancelador=None):
         if not colas_espera[clave]:
             del colas_espera[clave]
 
-
 @bot.command()
 @commands.is_owner()
 async def reiniciar(ctx):
@@ -350,9 +342,6 @@ async def estado(ctx):
         )
     await ctx.send(embed=embed)
 
-
-
-
 @bot.event
 async def on_ready():
     print(f"🔥 Bot activo como un motor 2 tiempos: {bot.user}")
@@ -360,33 +349,38 @@ async def on_ready():
 
     print("Limpiando canales de cueva...")
 
+    # Obtención directa de canales
     respawn_channel = bot.get_channel(RESPAWN_CHANNEL_ID)
     ocupados_channel = bot.get_channel(OCUPADOS_CHANNEL_ID)
 
+    # Función para limpiar mensajes con un título específico
     async def limpiar_mensajes_con_titulo(channel, titulos):
         if not channel:
             print(f"Canal con ID {channel.id} no encontrado.")
             return
 
         try:
-            async for message in channel.history(limit=100):
+            # Reducido el límite de mensajes a procesar (50 en lugar de 100)
+            async for message in channel.history(limit=50):
                 for embed in message.embeds:
                     if embed.title and any(titulo.lower() in embed.title.lower() for titulo in titulos):
-                        await message.delete()
-                        print(f"Embed eliminado en canal {channel.name}: {embed.title}")
+                        # Solo eliminar si no está ya borrado
+                        if not message.deleted:
+                            await message.delete()
+                            print(f"Embed eliminado en canal {channel.name}: {embed.title}")
         except discord.Forbidden:
             print(f"No tengo permisos para borrar mensajes en {channel.name}")
         except Exception as e:
             print(f"Error al borrar mensajes en {channel.name}: {e}")
 
-    # Borrar 'Cueva Reclamada' en canal de respawn
-    await limpiar_mensajes_con_titulo(respawn_channel, ["cueva reclamada"])
+    # Llamada a la función para limpiar los mensajes de los canales
+    if respawn_channel:
+        await limpiar_mensajes_con_titulo(respawn_channel, ["cueva reclamada"])
 
-    # Borrar 'Cueva Ocupada' en canal de ocupados
-    await limpiar_mensajes_con_titulo(ocupados_channel, ["cueva ocupada"])
+    if ocupados_channel:
+        await limpiar_mensajes_con_titulo(ocupados_channel, ["cueva ocupada"])
 
     print("Limpieza completada ✅")
-
 
 # Manejo de error 429: cuando hay un límite de solicitudes alcanzado
 @bot.event
@@ -409,20 +403,24 @@ async def test(ctx):
 last_update = 0
 update_interval = 10  # Actualiza el embed solo cada 10 segundos.     
 
-
-
-# Evento para manejar los mensajes
 @bot.event
 async def on_message(message):
-    if message.author == bot.user:
-        return  # Evitar que el bot responda a sus propios mensajes
+    # Evitar que el bot responda a sí mismo o a otros bots
+    if message.author.bot:
+        return
 
+    # Llama la función que controla el spam en clima
+    borrado = await manejar_mensaje_global(message)
+    if borrado:
+        print("🧹 Mensaje borrado por cooldown global.")
+        return  # Si se borró, no procesar nada más
+
+    # Ejemplo de palabra clave
     if "algun mensaje especial" in message.content.lower():
-        # Acciones a realizar si el mensaje contiene una palabra clave
         await message.channel.send("¡Encontré algo interesante!")
 
-    await bot.process_commands(message)  # No olvides procesar los comandos después de manejar el mensaje.
-
+    # Asegúrate siempre de procesar comandos
+    await bot.process_commands(message)
 
 @bot.command()
 @commands.has_permissions(administrator=True)
@@ -484,9 +482,6 @@ async def on_command_error(ctx, error):
     else:
         await ctx.send("😞 Algo salió mal. Intenta nuevamente más tarde.")
         raise error  # Esto sigue siendo útil para debug
-
-
-
 
 # 👇 SIEMPRE al final del todo
 bot.run(os.getenv("DISCORD_TOKEN"))
