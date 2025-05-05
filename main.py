@@ -1,6 +1,8 @@
 from keep_alive import keep_alive
 keep_alive()
 
+import time
+import random
 import discord
 from discord.ext import commands, tasks
 import os
@@ -8,6 +10,8 @@ from dotenv import load_dotenv
 from datetime import datetime, timedelta
 from caves import caves
 from pausado import manejar_mensaje_global
+import asyncio
+
 
 
 load_dotenv()
@@ -21,6 +25,8 @@ intents.message_content = True
 intents.guilds = True
 intents.members = True
 bot = commands.Bot(command_prefix='!', intents=intents)
+
+rate_limit_semaphore = asyncio.Semaphore(5)  # Solo 5 acciones a la vez
 
 cuevas_ocupadas = {}
 colas_espera = {}
@@ -56,8 +62,9 @@ def tiene_posteo_activo(usuario):
                 return True
             else:
                 # Si el posteo ya expiró, elimina la cueva de las ocupadas
-                clave = [clave for clave, cueva in cuevas_ocupadas.items() if cueva["usuario"].id == usuario.id][0]
-                del cuevas_ocupadas[clave]
+                clave = next((k for k, v in cuevas_ocupadas.items() if v["usuario"].id == usuario.id), None)
+                if clave:
+                    del cuevas_ocupadas[clave]
                 return False
     return False
 
@@ -69,14 +76,8 @@ def esta_en_una_cola(usuario):
     return False
 
 
-@bot.event
-async def on_ready():
-    print(f"🔥 Bot activo como un motor 2 tiempos: {bot.user}")
-    iniciar_reinicio(bot)
-
-
-
 @bot.command()
+@commands.cooldown(rate=1, per=3.0, type=commands.BucketType.user)
 async def claim(ctx, tipo: str, numero: int, duracion: str):
     # Verificar si el usuario está en cola
     if esta_en_una_cola(ctx.author):
@@ -136,8 +137,13 @@ async def procesar_claim(usuario, tipo: str, numero: int, duracion: str, ctx=Non
     canal_respawn = bot.get_channel(RESPAWN_CHANNEL_ID)
     canal_ocupados = bot.get_channel(OCUPADOS_CHANNEL_ID)
 
-    mensaje_posteo = await canal_respawn.send(embed=embed_posteo)
-    mensaje_ocupado = await canal_ocupados.send(embed=embed_ocupado)
+    async with rate_limit_semaphore:
+        mensaje_posteo = await canal_respawn.send(embed=embed_posteo)
+    await asyncio.sleep(random.uniform(1.5, 3.0))  # le das un respiro a Discord
+    async with rate_limit_semaphore:
+        mensaje_ocupado = await canal_ocupados.send(embed=embed_ocupado)
+
+
 
     cuevas_ocupadas[clave] = {
         "usuario": usuario,
@@ -149,16 +155,18 @@ async def procesar_claim(usuario, tipo: str, numero: int, duracion: str, ctx=Non
     iniciar_tarea_embed(clave)
 
 
+
 def iniciar_tarea_embed(clave):
     if clave in tareas_embed:
         return  # Ya hay una tarea corriendo
 
-    @tasks.loop(seconds=60)
+    @tasks.loop(seconds=300)
     async def actualizar():
         data = cuevas_ocupadas.get(clave)
-        if not data:
+        if not data.get("mensaje_ocupado"):
             actualizar.cancel()
             return
+
 
         tiempo_restante = data["tiempo_final"] - datetime.utcnow()
         if tiempo_restante.total_seconds() <= 0:
@@ -167,15 +175,35 @@ def iniciar_tarea_embed(clave):
             return
 
         tiempo_formateado = formatear_tiempo(data["tiempo_final"])
+
         try:
             embed = data["mensaje_ocupado"].embeds[0]
-            embed.set_field_at(1, name="Tiempo Restante", value=tiempo_formateado, inline=True)
-            await data["mensaje_ocupado"].edit(embed=embed)
-        except:
-            pass
+            campo_actual = embed.fields[1].value
+
+            # Solo edita si el texto cambió
+            if campo_actual != tiempo_formateado:
+                embed.set_field_at(1, name="Tiempo Restante", value=tiempo_formateado, inline=True)
+                async with rate_limit_semaphore:
+                    await data["mensaje_ocupado"].edit(embed=embed)
+
+
+        except discord.NotFound:
+            print(f"[❌] El mensaje de la cueva {clave} fue eliminado.")
+            actualizar.cancel()
+        except discord.HTTPException as e:
+            print(f"[⚠️] Error al editar el embed de {clave}: {e}")
+        except Exception as e:
+            print(f"[🔥] Error inesperado en la tarea de {clave}: {e}")
 
     tareas_embed[clave] = actualizar
-    actualizar.start()
+
+    # Inicia con delay aleatorio para que no todos editen al mismo tiempo
+    async def start_con_delay():
+        await asyncio.sleep(random.randint(1, 30))
+        actualizar.start()
+
+    bot.loop.create_task(start_con_delay())
+
 
 @bot.command()
 async def cancel(ctx):
@@ -245,20 +273,27 @@ async def salircola(ctx):
 async def finalizar_cueva(clave, cancelador=None):
     data = cuevas_ocupadas.get(clave)
     if not data:
+        print(f"[FINALIZAR] No hay datos para la clave: {clave}")
         return
 
     try:
         await data["mensaje_ocupado"].delete()
-    except:
-        pass
+    except Exception as e:
+        print(f"[ERROR] No se pudo borrar el mensaje ocupado: {e}")
 
     usuario_anterior = data["usuario"]
-    nombre_cueva = obtener_nombre_cueva(int(clave.split()[1]))  # Usar la función para obtener el nombre de la cueva
 
-    if cancelador and cancelador.id == usuario_anterior.id:
+    try:
+        nombre_cueva = obtener_nombre_cueva(int(clave.split()[1]))
+    except Exception as e:
+        print(f"[ERROR] No se pudo obtener el nombre de la cueva: {e}")
+        nombre_cueva = "desconocida"
+
+    if not cancelador or cancelador.id == usuario_anterior.id:
         cooldowns.setdefault(clave, {})[usuario_anterior.id] = datetime.utcnow() + timedelta(minutes=15)
 
     del cuevas_ocupadas[clave]
+
     if clave in tareas_embed:
         tareas_embed[clave].cancel()
         del tareas_embed[clave]
@@ -266,19 +301,29 @@ async def finalizar_cueva(clave, cancelador=None):
     try:
         canal_privado = await usuario_anterior.create_dm()
         if cancelador:
-            await canal_privado.send(f"❌ Has cancelado tu posteo en la cueva {nombre_cueva}.")  # Mostrar el nombre de la cueva
+            await canal_privado.send(f"❌ Has cancelado tu posteo en la cueva {nombre_cueva}.")
         else:
-            await canal_privado.send(f"⏰ Se terminó tu tiempo en la cueva {nombre_cueva}.")  # Mostrar el nombre de la cueva
-    except:
-        pass
+            await canal_privado.send(f"⏰ Se terminó tu tiempo en la cueva {nombre_cueva}.")
+    except Exception as e:
+        print(f"[ERROR] No se pudo enviar DM a {usuario_anterior.display_name}: {e}")
 
     if clave in colas_espera and colas_espera[clave]:
         siguiente, duracion = colas_espera[clave].pop(0)
-        canal_temporal = await siguiente.create_dm()
-        await canal_temporal.send(f"📢 Te tocó postear en la cueva {nombre_cueva} por {duracion}, posteando...")  # Mostrar el nombre de la cueva
-        tipo, numero = clave.split()
-        await procesar_claim(siguiente, tipo, int(numero), duracion)
 
+        try:
+            canal_temporal = await siguiente.create_dm()
+            await canal_temporal.send(f"📢 Te tocó postear en la cueva {nombre_cueva} por {duracion}, posteando...")
+        except Exception as e:
+            print(f"[ERROR] No se pudo enviar DM a {siguiente.display_name}: {e}")
+
+        try:
+            tipo, numero = clave.split()
+            await procesar_claim(siguiente, tipo, int(numero), duracion)
+        except Exception as e:
+            print(f"[ERROR] Falló el claim automático para {siguiente.display_name}: {e}")
+
+        if not colas_espera[clave]:
+            del colas_espera[clave]
 
 
 @bot.command()
@@ -310,7 +355,9 @@ async def estado(ctx):
 
 @bot.event
 async def on_ready():
-    print(f"Bot conectado como {bot.user}")
+    print(f"🔥 Bot activo como un motor 2 tiempos: {bot.user}")
+    iniciar_reinicio(bot)
+
     print("Limpiando canales de cueva...")
 
     respawn_channel = bot.get_channel(RESPAWN_CHANNEL_ID)
@@ -341,15 +388,41 @@ async def on_ready():
     print("Limpieza completada ✅")
 
 
+# Manejo de error 429: cuando hay un límite de solicitudes alcanzado
+@bot.event
+async def on_error(event, *args, **kwargs):
+    # Verifica si el error es un HTTPException 429 (Demasiadas solicitudes)
+    if isinstance(event, discord.errors.HTTPException) and event.status == 429:
+        # Extrae el tiempo de espera (retry_after) en segundos desde el error
+        retry_after = event.response.get("retry_after", 0)
+        print(f"Rate limit alcanzado, esperando {retry_after} segundos.")
+        # Espera antes de intentar nuevamente
+        await asyncio.sleep(retry_after)
+
+# Ejemplo de comando que podría estar realizando solicitudes frecuentes
+@bot.command()
+async def test(ctx):
+    # Este es un ejemplo donde el bot envía un mensaje, puedes poner aquí cualquier solicitud
+    await ctx.send("¡Hola, estoy funcionando!")
+
+# Manejador de solicitudes frecuentes (como la actualización de embeds)
+last_update = 0
+update_interval = 10  # Actualiza el embed solo cada 10 segundos.     
+
+
+
 # Evento para manejar los mensajes
 @bot.event
 async def on_message(message):
-    borrado = await manejar_mensaje_global(message)
+    if message.author == bot.user:
+        return  # Evitar que el bot responda a sus propios mensajes
 
-    if borrado:
-        return  # Si fue borrado, no proceses el comando
+    if "algun mensaje especial" in message.content.lower():
+        # Acciones a realizar si el mensaje contiene una palabra clave
+        await message.channel.send("¡Encontré algo interesante!")
 
-    await bot.process_commands(message)
+    await bot.process_commands(message)  # No olvides procesar los comandos después de manejar el mensaje.
+
 
 @bot.command()
 @commands.has_permissions(administrator=True)
@@ -397,6 +470,22 @@ async def cola(ctx):
             embed.add_field(name=f"🕳️ {nombre_cueva}", value=f"{personas}", inline=False)
 
     await ctx.send(embed=embed)
+
+@bot.event
+async def on_command_error(ctx, error):
+    if isinstance(error, discord.HTTPException) and error.status == 429:
+        retry_after = getattr(error, "retry_after", 5)
+        await ctx.send(f"😵‍💫 Estoy siendo rate-limiteado por Discord. Reintentando en {retry_after} segundos...")
+        await asyncio.sleep(retry_after)
+    elif isinstance(error, discord.CommandNotFound):
+        await ctx.send("🚫 Ese comando no existe. Usa `!help` para ver la lista de comandos.")
+    elif isinstance(error, discord.Forbidden):
+        await ctx.send("🚫 No tengo permisos para hacer eso. Verifica los permisos del bot.")
+    else:
+        await ctx.send("😞 Algo salió mal. Intenta nuevamente más tarde.")
+        raise error  # Esto sigue siendo útil para debug
+
+
 
 
 # 👇 SIEMPRE al final del todo
