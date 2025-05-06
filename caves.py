@@ -3,14 +3,14 @@
 # ==========================
 caves = [
     {"id": 100, "name": "Giant Spider - Superficie 1 - Panuk"},
-    {"id": 101, "name": "Giant Spider - Superficie 2 - Panuk"}
-    {"id": 102, "name": "Giant Spider - Superficie 3 - Panuk"}
-    {"id": 103, "name": "Giant Spider 1 - -2 - Panuk"}
-    {"id": 104, "name": "Giant Spider 2 - -2 - Panuk"}
-    {"id": 105, "name": "Giant Spider 3 - -2 - Panuk"}
-    {"id": 106, "name": "Giant Spider 1 - -3 - Panuk"}
-    {"id": 107, "name": "Giant Spider 2 - -3 - Panuk"}
-    {"id": 108, "name": "Giant Spider 3 - -3 - Panuk"}
+    {"id": 101, "name": "Giant Spider - Superficie 2 - Panuk"},
+    {"id": 102, "name": "Giant Spider - Superficie 3 - Panuk"},
+    {"id": 103, "name": "Giant Spider 1 - -2 - Panuk"},
+    {"id": 104, "name": "Giant Spider 2 - -2 - Panuk"},
+    {"id": 105, "name": "Giant Spider 3 - -2 - Panuk"},
+    {"id": 106, "name": "Giant Spider 1 - -3 - Panuk"},
+    {"id": 107, "name": "Giant Spider 2 - -3 - Panuk"},
+    {"id": 108, "name": "Giant Spider 3 - -3 - Panuk"},
     {"id": 109, "name": "Lobos - Superfice 1 - Panuk"},
     {"id": 110, "name": "Lobos/Cave 1 - -1 - Panuk"},
     {"id": 111, "name": "Lobos/Cave 1 - -2 - Panuk"},
@@ -39,8 +39,8 @@ caves = [
     {"id": 134, "name": "Frozen Minotaur 3 - Panuk"},
     {"id": 135, "name": "Frozen Minotaur 4 - Panuk"},
     {"id": 136, "name": "Cold Banshee - Panuk"},
-    {"id": 137, "name": "Cold Banshee 2 - -3 - Panuk"}
-    {"id": 138, "name": "Glaciar Spider - Panuk"}
+    {"id": 137, "name": "Cold Banshee 2 - -3 - Panuk"},
+    {"id": 138, "name": "Glaciar Spider - Panuk"},
     {"id": 139, "name": "Mystic Hydra - Panuk"},
     {"id": 140, "name": "Tigres Superfice - Panuk"},
     {"id": 141, "name": "Tigres -2 - Panuk"},
