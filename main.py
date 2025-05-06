@@ -290,22 +290,32 @@ async def finalizar_cueva(clave, cancelador=None):
         del tareas_embed[clave]
 
     try:
-        canal_privado = await usuario_anterior.create_dm()
-        if cancelador:
-            await canal_privado.send(f"❌ Has cancelado tu posteo en la cueva {nombre_cueva}.")
-        else:
-            await canal_privado.send(f"⏰ Se terminó tu tiempo en la cueva {nombre_cueva}.")
+        await asyncio.sleep(random.uniform(0.5, 2.0))
+        async with rate_limit_semaphore:
+            canal_privado = await usuario_anterior.create_dm()
+            if cancelador:
+                await canal_privado.send(f"❌ Has cancelado tu posteo en la cueva {nombre_cueva}.")
+            else:
+                await canal_privado.send(f"⏰ Se terminó tu tiempo en la cueva {nombre_cueva}.")
+    except discord.Forbidden:
+        print(f"[ERROR] {usuario_anterior.display_name} tiene los DMs desactivados.")
     except Exception as e:
         print(f"[ERROR] No se pudo enviar DM a {usuario_anterior.display_name}: {e}")
+
 
     if clave in colas_espera and colas_espera[clave]:
         siguiente, duracion = colas_espera[clave].pop(0)
 
         try:
-            canal_temporal = await siguiente.create_dm()
-            await canal_temporal.send(f"📢 Te tocó postear en la cueva {nombre_cueva} por {duracion}, posteando...")
+            await asyncio.sleep(random.uniform(0.5, 2.0))
+            async with rate_limit_semaphore:
+                canal_temporal = await siguiente.create_dm()
+                await canal_temporal.send(f"📢 Te tocó postear en la cueva {nombre_cueva} por {duracion}, posteando...")
+        except discord.Forbidden:
+            print(f"[ERROR] {siguiente.display_name} tiene los DMs desactivados.")
         except Exception as e:
             print(f"[ERROR] No se pudo enviar DM a {siguiente.display_name}: {e}")
+
 
         try:
             tipo, numero = clave.split()
