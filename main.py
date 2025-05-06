@@ -12,8 +12,6 @@ from caves import caves
 from pausado import manejar_mensaje_global
 import asyncio
 
-
-
 load_dotenv()
 
 CLIMA_CHANNEL_ID = int(os.getenv("CLIMA_CHANNEL_ID"))
@@ -74,7 +72,6 @@ def esta_en_una_cola(usuario):
             if persona.id == usuario.id:
                 return True
     return False
-
 
 @bot.command()
 @commands.cooldown(rate=1, per=3.0, type=commands.BucketType.user)
@@ -143,8 +140,6 @@ async def procesar_claim(usuario, tipo: str, numero: int, duracion: str, ctx=Non
     async with rate_limit_semaphore:
         mensaje_ocupado = await canal_ocupados.send(embed=embed_ocupado)
 
-
-
     cuevas_ocupadas[clave] = {
         "usuario": usuario,
         "tiempo_final": tiempo_final,
@@ -153,8 +148,6 @@ async def procesar_claim(usuario, tipo: str, numero: int, duracion: str, ctx=Non
     }
 
     iniciar_tarea_embed(clave)
-
-
 
 def iniciar_tarea_embed(clave):
     if clave in tareas_embed:
@@ -203,7 +196,6 @@ def iniciar_tarea_embed(clave):
         actualizar.start()
 
     bot.loop.create_task(start_con_delay())
-
 
 @bot.command()
 async def cancel(ctx):
@@ -257,7 +249,6 @@ async def next(ctx, tipo: str, numero: int, duracion: str = "1h"):
     # Añadir al usuario a la cola
     colas_espera.setdefault(clave, []).append((usuario, duracion))
     await ctx.send(f"🗓️ {usuario.mention} añadido a la cola para la cueva {clave} ({duracion}).")
-
 
 @bot.command()
 async def salircola(ctx):
@@ -325,7 +316,6 @@ async def finalizar_cueva(clave, cancelador=None):
         if not colas_espera[clave]:
             del colas_espera[clave]
 
-
 @bot.command()
 @commands.is_owner()
 async def reiniciar(ctx):
@@ -350,54 +340,19 @@ async def estado(ctx):
         )
     await ctx.send(embed=embed)
 
-
-
-
 @bot.event
 async def on_ready():
     print(f"🔥 Bot activo como un motor 2 tiempos: {bot.user}")
-    iniciar_reinicio(bot)
-
-    print("Limpiando canales de cueva...")
 
     respawn_channel = bot.get_channel(RESPAWN_CHANNEL_ID)
     ocupados_channel = bot.get_channel(OCUPADOS_CHANNEL_ID)
 
-    async def limpiar_mensajes_con_titulo(channel, titulos):
-        if not channel:
-            print(f"Canal con ID {channel.id} no encontrado.")
-            return
-
-        try:
-            async for message in channel.history(limit=100):
-                for embed in message.embeds:
-                    if embed.title and any(titulo.lower() in embed.title.lower() for titulo in titulos):
-                        await message.delete()
-                        print(f"Embed eliminado en canal {channel.name}: {embed.title}")
-        except discord.Forbidden:
-            print(f"No tengo permisos para borrar mensajes en {channel.name}")
-        except Exception as e:
-            print(f"Error al borrar mensajes en {channel.name}: {e}")
-
-    # Borrar 'Cueva Reclamada' en canal de respawn
-    await limpiar_mensajes_con_titulo(respawn_channel, ["cueva reclamada"])
-
-    # Borrar 'Cueva Ocupada' en canal de ocupados
-    await limpiar_mensajes_con_titulo(ocupados_channel, ["cueva ocupada"])
-
-    print("Limpieza completada ✅")
-
-
-# Manejo de error 429: cuando hay un límite de solicitudes alcanzado
 @bot.event
 async def on_error(event, *args, **kwargs):
-    # Verifica si el error es un HTTPException 429 (Demasiadas solicitudes)
-    if isinstance(event, discord.errors.HTTPException) and event.status == 429:
-        # Extrae el tiempo de espera (retry_after) en segundos desde el error
-        retry_after = event.response.get("retry_after", 0)
-        print(f"Rate limit alcanzado, esperando {retry_after} segundos.")
-        # Espera antes de intentar nuevamente
-        await asyncio.sleep(retry_after)
+    import traceback
+    with open("error.log", "a", encoding="utf-8") as f:
+        f.write(f"\n🔴 Error en evento: {event}\n")
+        traceback.print_exc(file=f)
 
 # Ejemplo de comando que podría estar realizando solicitudes frecuentes
 @bot.command()
@@ -408,7 +363,6 @@ async def test(ctx):
 # Manejador de solicitudes frecuentes (como la actualización de embeds)
 last_update = 0
 update_interval = 10  # Actualiza el embed solo cada 10 segundos.     
-
 
 @bot.event
 async def on_message(message):
@@ -425,7 +379,6 @@ async def on_message(message):
         await message.channel.send("¡Encontré algo interesante!")
 
     await bot.process_commands(message)  # Procesar comandos al final
-
 
 @bot.command()
 @commands.has_permissions(administrator=True)
@@ -487,7 +440,6 @@ async def on_command_error(ctx, error):
     else:
         await ctx.send("😞 Algo salió mal. Intenta nuevamente más tarde.")
         raise error  # Esto sigue siendo útil para debug
-
 
 # 👇 SIEMPRE al final del todo
 bot.run(os.getenv("DISCORD_TOKEN"))
