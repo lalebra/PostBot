@@ -113,7 +113,7 @@ async def procesar_claim(usuario, tipo: str, numero: int, duracion: str, ctx=Non
             return
 
     tiempo_segundos = convertir_duracion(duracion)
-    if not tiempo_segundos or tiempo_segundos < 3600 or tiempo_segundos > 7200:
+    if not tiempo_segundos or tiempo_segundos < 300 or tiempo_segundos > 7200:
         if ctx:
             await ctx.send("⛔ La duración debe ser entre 1h y 2h (ej: `!claim B 1 2h`).")
         return
@@ -149,6 +149,10 @@ async def procesar_claim(usuario, tipo: str, numero: int, duracion: str, ctx=Non
 
     iniciar_tarea_embed(clave)
 
+        # Esperar el tiempo y finalizar
+    await asyncio.sleep(tiempo_segundos)
+    await finalizar_cueva(clave, motivo="tiempo")
+    
 def iniciar_tarea_embed(clave):
     if clave in tareas_embed:
         return  # Ya hay una tarea corriendo
@@ -210,12 +214,18 @@ async def cancel(ctx):
         await ctx.send("❌ No tienes ninguna cueva posteada.")
         return
 
-    await finalizar_cueva(clave, cancelador=autor)
+    await finalizar_cueva(clave, motivo="cancelacion", cancelador=ctx.author)
+
     
 @bot.command()
 async def next(ctx, tipo: str, numero: int, duracion: str = "1h"):
     clave = f"{tipo.upper()} {numero}"
     usuario = ctx.author
+
+    try:
+        nombre_cueva = obtener_nombre_cueva(numero)
+    except:
+        nombre_cueva = clave  # Fallback si falla
 
     # Verificar si la cueva está activa
     if clave not in cuevas_ocupadas:
@@ -237,18 +247,23 @@ async def next(ctx, tipo: str, numero: int, duracion: str = "1h"):
         for c, cola in colas_espera.items():
             for persona, _ in cola:
                 if persona.id == usuario.id:
-                    await ctx.send(f"🚫 Ya estás en la cola para la cueva {c}.")
+                    try:
+                        nombre_actual = obtener_nombre_cueva(int(c.split()[1]))
+                    except:
+                        nombre_actual = c
+                    await ctx.send(f"🚫 Ya estás en la cola para la cueva **{nombre_actual}**.")
                     return
 
     # Verificar si la duración es válida
     tiempo_segundos = convertir_duracion(duracion)
-    if not tiempo_segundos or tiempo_segundos < 3600 or tiempo_segundos > 7200:
-        await ctx.send("⛔ La duración debe ser entre 1h y 2h (ej: `!next B 1 2h`).")
+    if not tiempo_segundos or tiempo_segundos < 300 or tiempo_segundos > 7200:
+        await ctx.send("⛔ La duración debe ser entre 5 minutos y 2 horas (ej: `!next B 1 2h`).")
         return
 
     # Añadir al usuario a la cola
     colas_espera.setdefault(clave, []).append((usuario, duracion))
-    await ctx.send(f"🗓️ {usuario.mention} añadido a la cola para la cueva {clave} ({duracion}).")
+    await ctx.send(f"🗓️ {usuario.mention} añadido a la cola para la cueva **{nombre_cueva}** ({duracion}).")
+
 
 @bot.command()
 async def salircola(ctx):
@@ -257,71 +272,78 @@ async def salircola(ctx):
         nueva_cola = [(p, t) for p, t in colas_espera[clave] if p.id != usuario.id]
         if len(nueva_cola) < len(colas_espera[clave]):
             colas_espera[clave] = nueva_cola
-            await ctx.send(f"✅ {usuario.mention} ha salido de la cola para la cueva {clave}.")
+            try:
+                nombre_cueva = obtener_nombre_cueva(int(clave.split()[1]))
+            except:
+                nombre_cueva = clave  # Fallback si hay error
+
+            await ctx.send(f"✅ {usuario.mention} ha salido de la cola para la cueva **{nombre_cueva}**.")
             return
     await ctx.send("❌ No estás en ninguna cola.")
 
-async def finalizar_cueva(clave, cancelador=None):
+async def notificar_final_por_tiempo(usuario, nombre_cueva):
+    try:
+        await asyncio.sleep(random.uniform(1.5, 2.5))
+        async with rate_limit_semaphore:
+            canal_privado = await usuario.create_dm()
+            await canal_privado.send(f"⏰ Se terminó tu tiempo en la cueva {nombre_cueva}.")
+    except:
+        pass
+
+async def notificar_cancelacion_manual(usuario, nombre_cueva):
+    try:
+        await asyncio.sleep(random.uniform(1.5, 2.5))
+        async with rate_limit_semaphore:
+            canal_privado = await usuario.create_dm()
+            await canal_privado.send(f"❌ Has cancelado tu posteo en la cueva {nombre_cueva}.")
+    except:
+        pass
+
+async def finalizar_cueva(clave, motivo="tiempo", cancelador=None):
     data = cuevas_ocupadas.get(clave)
     if not data:
-        print(f"[FINALIZAR] No hay datos para la clave: {clave}")
         return
 
     try:
         await data["mensaje_ocupado"].delete()
-    except Exception as e:
-        print(f"[ERROR] No se pudo borrar el mensaje ocupado: {e}")
+    except:
+        pass
 
     usuario_anterior = data["usuario"]
 
     try:
         nombre_cueva = obtener_nombre_cueva(int(clave.split()[1]))
-    except Exception as e:
-        print(f"[ERROR] No se pudo obtener el nombre de la cueva: {e}")
-        nombre_cueva = "desconocida"
+    except:
+        nombre_cueva = clave  # fallback
 
-    if not cancelador or cancelador.id == usuario_anterior.id:
+    # Si terminó el tiempo o se canceló por el mismo usuario, aplicar cooldown
+    if motivo == "tiempo" or (motivo == "cancelacion" and cancelador and cancelador.id == usuario_anterior.id):
         cooldowns.setdefault(clave, {})[usuario_anterior.id] = datetime.utcnow() + timedelta(minutes=15)
 
     del cuevas_ocupadas[clave]
-
     if clave in tareas_embed:
         tareas_embed[clave].cancel()
         del tareas_embed[clave]
 
-    try:
-        await asyncio.sleep(random.uniform(0.5, 2.0))
-        async with rate_limit_semaphore:
-            canal_privado = await usuario_anterior.create_dm()
-            if cancelador:
-                await canal_privado.send(f"❌ Has cancelado tu posteo en la cueva {nombre_cueva}.")
-            else:
-                await canal_privado.send(f"⏰ Se terminó tu tiempo en la cueva {nombre_cueva}.")
-    except discord.Forbidden:
-        print(f"[ERROR] {usuario_anterior.display_name} tiene los DMs desactivados.")
-    except Exception as e:
-        print(f"[ERROR] No se pudo enviar DM a {usuario_anterior.display_name}: {e}")
+    # Notificación por DM, usando funciones separadas
+    if motivo == "cancelacion":
+        await notificar_cancelacion_manual(usuario_anterior, nombre_cueva)
+    elif motivo == "tiempo":
+        await notificar_final_por_tiempo(usuario_anterior, nombre_cueva)
 
-
+    # Revisar si hay alguien en la cola
     if clave in colas_espera and colas_espera[clave]:
         siguiente, duracion = colas_espera[clave].pop(0)
-
         try:
             await asyncio.sleep(random.uniform(0.5, 2.0))
             async with rate_limit_semaphore:
                 canal_temporal = await siguiente.create_dm()
                 await canal_temporal.send(f"📢 Te tocó postear en la cueva {nombre_cueva} por {duracion}, posteando...")
-        except discord.Forbidden:
-            print(f"[ERROR] {siguiente.display_name} tiene los DMs desactivados.")
-        except Exception as e:
-            print(f"[ERROR] No se pudo enviar DM a {siguiente.display_name}: {e}")
+        except:
+            pass
 
-
-        try:
-            tipo, numero = clave.split()
-            await procesar_claim(siguiente, tipo, int(numero), duracion)
-        except Exception as e:
-            print(f"[ERROR] Falló el claim automático para {siguiente.display_name}: {e}")
+        tipo, numero = clave.split()
+        await procesar_claim(siguiente, tipo, int(numero), duracion)
 
         if not colas_espera[clave]:
             del colas_espera[clave]
@@ -416,6 +438,25 @@ async def quitarpost(ctx, usuario: discord.User):
 
     # Enviar mensaje en el canal de comandos indicando que el usuario fue sacado
     await ctx.send(f"✅ {usuario.mention} ha sido sacado de la cueva {obtener_nombre_cueva(int(clave.split()[1]))}.")
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def quitarcola(ctx, usuario: discord.User):
+    encontrado = False
+    for clave in list(colas_espera.keys()):
+        nueva_cola = [(p, t) for p, t in colas_espera[clave] if p.id != usuario.id]
+        if len(nueva_cola) < len(colas_espera[clave]):
+            colas_espera[clave] = nueva_cola
+            encontrado = True
+            try:
+                nombre_cueva = obtener_nombre_cueva(int(clave.split()[1]))
+            except:
+                nombre_cueva = clave  # Fallback si falla
+            await ctx.send(f"✅ {usuario.mention} ha sido removido de la cola para la cueva **{nombre_cueva}**.")
+    
+    if not encontrado:
+        await ctx.send(f"❌ {usuario.mention} no está en ninguna cola.")
+
 
 @bot.command()
 async def cola(ctx):

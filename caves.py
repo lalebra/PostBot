@@ -128,6 +128,7 @@ caves = [
     {"id": 418, "name": "Sand Djin - Hellviwer"},
     {"id": 419, "name": "Sand Master - Hellviwer"},
     {"id": 420, "name": "Sand Wizard - Hellviwer"},
+    {"id": 421, "name": "Sabertooth - Hellviwer"},
 
 # ==========================
 # 🌑 Región: UMBRA
