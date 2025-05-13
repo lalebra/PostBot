@@ -113,7 +113,7 @@ async def procesar_claim(usuario, tipo: str, numero: int, duracion: str, ctx=Non
             return
 
     tiempo_segundos = convertir_duracion(duracion)
-    if not tiempo_segundos or tiempo_segundos < 300 or tiempo_segundos > 7200:
+    if not tiempo_segundos or tiempo_segundos < 3600 or tiempo_segundos > 7200:
         if ctx:
             await ctx.send("⛔ La duración debe ser entre 1h y 2h (ej: `!claim B 1 2h`).")
         return
@@ -256,7 +256,7 @@ async def next(ctx, tipo: str, numero: int, duracion: str = "1h"):
 
     # Verificar si la duración es válida
     tiempo_segundos = convertir_duracion(duracion)
-    if not tiempo_segundos or tiempo_segundos < 300 or tiempo_segundos > 7200:
+    if not tiempo_segundos or tiempo_segundos < 3600 or tiempo_segundos > 7200:
         await ctx.send("⛔ La duración debe ser entre 5 minutos y 2 horas (ej: `!next B 1 2h`).")
         return
 
